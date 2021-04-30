@@ -18,20 +18,27 @@ event_num2 = 15000
 momentum1= 2
 momentum2= 85
 #入射角度的最大值
+# maximum of incident angle
 max_anglep = 40
 #入射角度的最小值
+# minimum of incident angle
 min_anglep = 10
 #无磁场区域的高度（m）
+# height of region without magnetfield
 mag_radius = 6.8
 #噪声概率
+# probability to generate noise hit for each strip
 noise_probability = 0.001
 #单个strip的接收概率
+# probability for the main strip to generate a muon hit
 efficiency = 0.7
 
 #随机生成动量和入射角度
+# momentum and incident angle are generated randomly
 def ptc_init(ptc_type):
     pai=3.14159265
     #将角度转化为弧度
+    # transform into radiant angle
     anglep = round(random.uniform(min_anglep, max_anglep),4)
     angle = round(anglep/180*pai,4)
 
@@ -45,9 +52,11 @@ def ptc_init(ptc_type):
         print("wrong particle type")
 
     #动量与半径的关系为固定值约为6.6，已考虑相对论效应
+    # The relativistic effect is taken
     particle_r = round(momentum * 6.6,4)
 
     # 数学计算，求出particle的x和y，即圆心的x,y坐标
+    # calculate the center point of muon path (circle)
     if ptc_type == -1:
         particle_x = round(mag_radius * math.tan(angle) + particle_r * math.cos(angle),5)
         particle_y = round(mag_radius - particle_r * math.sin(angle),5)
@@ -76,6 +85,7 @@ class RPC:
 
 
 # RPC是平行于x轴的。返回float类型x坐标。
+# x-coordinates are generated on each RPC layers
 def hit_single(RPC, ptc,ptc_type):
     x1, y1, x2, y2 = RPC.x1, RPC.y1, RPC.x2, RPC.y2
     particle_x, particle_y, particle_r = ptc[0], ptc[1], ptc[2]
@@ -92,6 +102,7 @@ def hit_single(RPC, ptc,ptc_type):
     return x
 
 # RPC参数设定,(x1,y1,x2,y2)
+# parameters for RPC detectors
 def RPC_init():
     RPC_3_2 = RPC(0, 9.838, 12.267, 9.838)
     RPC_3_1 = RPC(0, 9.832, 12.267, 9.832)
@@ -102,7 +113,7 @@ def RPC_init():
     return (RPC_1_1, RPC_1_2, RPC_2_1, RPC_2_2, RPC_3_1, RPC_3_2)
 
 # 生成主hit，把x坐标转化为strip序号。
-# 次级重要
+# muon hits are generated (strip number)
 # x==mainhit和 y==nearby_hit
 def mainhit_all(RPC_all, ptc,ptc_type,i):
     strip_list = []
@@ -118,10 +129,12 @@ def mainhit_all(RPC_all, ptc,ptc_type,i):
         noise_arr = write_noise(x, y, k, RPC_all)
         noise_arr.sort(reverse=True)
         strip_list.extend(noise_arr)
-    #print(strip_list)
+    print(strip_list)
     return (strip_list)
 
 #将主hit转变为strip序号,0.03是strip的width
+# transform coordinate into serial number of strip
+# strip_width = 3cm
 def main_strip(mainhit_position):
     if mainhit_position > 0:
         mainhit_strip = int(mainhit_position / 0.03)
@@ -130,6 +143,7 @@ def main_strip(mainhit_position):
     return (mainhit_strip)
 
 # 根据主hit在其strip上的位置判断nearby_hit的strip序号
+# check the position for side effect(adjacent_hit)
 # 入射角为(10,40),未考虑打出RPClayer的情况
 def side_effect(mainhit_position, mainhit_strip):
     bia = mainhit_position - mainhit_strip * 0.03
@@ -140,6 +154,7 @@ def side_effect(mainhit_position, mainhit_strip):
     return (nearhit_strip)
 
 #根据主hit在其strip上位置判断生成nearby_hit的概率
+#calculate the probability to generate adjacent hit
 def near_ratio(mainhit_position, mainhit_strip):
     bia = mainhit_position - mainhit_strip * 0.03
     if bia >= 0.015:
@@ -148,7 +163,8 @@ def near_ratio(mainhit_position, mainhit_strip):
         near_probability = 1- bia / 0.015
     return (near_probability)
 
-#对主hit作eff判断,
+#对主hit作eff判断
+# judgement of strip_eff for the main muon hit
 def main_efficiency_bias(mainhit_strip):
     eff = random.uniform(0, 1)
     if eff < efficiency:
@@ -157,7 +173,8 @@ def main_efficiency_bias(mainhit_strip):
         biaspostion = -1
     return(biaspostion)
 
-#对nearhit作eff判断,      ####并用strip的中心坐标代替具体坐标
+#对nearhit作eff判断      ####并用strip的中心坐标代替具体坐标
+# judgement of strip_eff for the adjacent_hit
 def near_efficiency(nearhit_strip, near_probability):
     near_eff = random.uniform(0, 1)
     if near_eff < efficiency * near_probability:
@@ -167,6 +184,7 @@ def near_efficiency(nearhit_strip, near_probability):
     return(nearposition)
 
 #随机写入noise, #新增查重功能
+# noise generation
 def write_noise(x, y, layer_number, RPC_all):
     noise_arr = [0, 0, 0, 0, 0]
     k = 0
@@ -184,6 +202,7 @@ def write_noise(x, y, layer_number, RPC_all):
     return(noise_arr)
 
 #cluster的重建
+#cluster_reconstruction
 def cluster_reconstruction(strip_list):
     hit_check = [0, 0, 0, 0, 0, 0]
     cluster_strip = [[], [], [], [], [], []]
@@ -198,15 +217,18 @@ def cluster_reconstruction(strip_list):
             else:
                 break
         #检索信号数量
+        #check the number of hits
         hit_check[i] = hit_number
         #无视信号种类降序排列信号
+        # descending order
         check_strip.sort(reverse=True)
         check_strip = np.array(check_strip)
-        print(check_strip)
+        #print(check_strip)
         if hit_number > 0:
             m = 0
             while m < hit_number:
                 #通过自适应的cluster边界[min,max],实现可延展的cluster
+                # through adaptive cluster boundary [min, Max], the flexible cluster is realized
                 max = check_strip[m]
                 min = check_strip[m]
                 sum = check_strip[m]
@@ -228,14 +250,17 @@ def cluster_reconstruction(strip_list):
                     else:
                         continue
                 #cluster的边界[min,max], 若未能展开说明没有连续信号
+                # if min == max, contiguous hits don't exist
                 if max > min:
                     cluster_strip[i].append([sum/hits_in_cluster, hits_in_cluster, i])
                     cluster_number[i] = cluster_number[i] + 1
                 m = m + 1
                 #延展cluster中的信号不再进入cluster的搜索循环
+                # skip the loop of hits in cluster
                 if hits_in_cluster > 2:
                     m = m + hits_in_cluster-2
             #当不存在天然cluster时, 使用单点信号完成cluster的reconstruction
+            # reconstructed cluster on single hit if contiguoushits don't exist
             if cluster_number [i] == 0:
                 for m in range(hit_number):
                     if check_strip[m]>0:
@@ -246,6 +271,7 @@ def cluster_reconstruction(strip_list):
     return ([cluster_strip,cluster_number])
 
 #按RPC层数组合super_cluster(故技重施)
+# the same trick
 def super_cluster(cluster_strip,cluster_number,detector_number):
     super_list=[]
     super_strip = []
@@ -262,6 +288,7 @@ def super_cluster(cluster_strip,cluster_number,detector_number):
         m = 0
         while m < super_cluster_number:
             # 通过自适应的super_luster边界[min,max],实现可延展的super_cluster
+            # through adaptive super_cluster boundary [min, Max], the flexible super_cluster is realized
             max = super_list[m][0]
             min = super_list[m][0]
             sum = 0
@@ -282,10 +309,12 @@ def super_cluster(cluster_strip,cluster_number,detector_number):
                 else:
                     continue
             # super_cluster的边界没什么意义
+            # the strips could be equal on doublet layers
             if max >= min:
                 super_strip.append([sum / clusters_in_super_cluster, clusters_in_super_cluster,int(hits_in_super_cluster),layer_number_cluster])
             m = m + 1
             # 延展super_cluster中的cluster不再进入super_cluster的搜索循环
+            # skip the loop of clusters in super_cluster
             if clusters_in_super_cluster > 1:
                 m = m + clusters_in_super_cluster - 1
     else:
@@ -293,6 +322,7 @@ def super_cluster(cluster_strip,cluster_number,detector_number):
     return (super_strip)
 
 #找到基准线在RPC3和RPC1上的交点
+# crossover_point from straight line on RPC1 and RPC3
 def seed_corresponding(candidate_seed):
     seed_x = candidate_seed[0] * 0.03 + 0.015
     seed_RPC3_x = seed_x * 9.835 / 7.481
@@ -302,6 +332,7 @@ def seed_corresponding(candidate_seed):
     return([seed_RPC1_strip,seed_RPC3_strip])
 
 #通过比对super_cluster的距离选取最合适的构成candidate_event
+# find the suitable super_cluster with the least difference
 def super_cluster_selection(seed_strip, RPC_cluster):
     difference_const = 33
     selection = -1
@@ -380,7 +411,6 @@ def write_into(event_number, ptc_type):
             v = v + 1
         i = i + 1
     print(i, v , w)
-
 
 
 def output():
