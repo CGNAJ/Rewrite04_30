@@ -383,8 +383,6 @@ def write_into(event_number, ptc_type):
 
 
 
-
-# 遍历strip，得到输出
 def output():
     write_into(event_num1, 1)
     write_into(event_num2, -1)
