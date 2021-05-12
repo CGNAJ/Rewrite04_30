@@ -7,14 +7,15 @@ import math
 import csv
 from scipy.optimize import root, fsolve
 
-PATH = "./data2021/04_30/rewrite.csv"
+PATH = "./data2021/05_12/beforefilter1.csv"
+
 row = 6
 column = 7
 
 #mu+
-event_num1 = 15000
+event_num1 = 50000
 #mu-
-event_num2 = 15000
+event_num2 = 50000
 momentum1= 2
 momentum2= 85
 #入射角度的最大值
@@ -32,6 +33,11 @@ noise_probability = 0.001
 #单个strip的接收概率
 # probability for the main strip to generate a muon hit
 efficiency = 0.7
+
+count1=[0,0,0,0,0,0,0,0,0,0,0]
+count2=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+count3=[0,0,0,0,0,0,0,0,0,0,0]
+count4=[0,0,0,0,0,0,0,0,0,0,0]
 
 #随机生成动量和入射角度
 # momentum and incident angle are generated randomly
@@ -63,7 +69,7 @@ def ptc_init(ptc_type):
     elif ptc_type == 1:
         particle_x = round(mag_radius * math.tan(angle) - particle_r * math.cos(angle),5)
         particle_y = round(mag_radius + particle_r * math.sin(angle),5)
-    return [particle_x, particle_y, particle_r,anglep]
+    return [particle_x, particle_y, particle_r,anglep,momentum]
 # ------------------------------------------------------------------------------#
 # ------------------------------------------------------------------------------#
 # ------------------------------------------------------------------------------#
@@ -129,7 +135,7 @@ def mainhit_all(RPC_all, ptc,ptc_type,i):
         noise_arr = write_noise(x, y, k, RPC_all)
         noise_arr.sort(reverse=True)
         strip_list.extend(noise_arr)
-    print(strip_list)
+    #print(strip_list)
     return (strip_list)
 
 #将主hit转变为strip序号,0.03是strip的width
@@ -297,10 +303,11 @@ def super_cluster(cluster_strip,cluster_number,detector_number):
             layer_number_cluster = 1
             for n in range(m , super_cluster_number):
                 if super_list[n][0] > 0:
-                    if 0 <= (min - super_list[n][0]) <= 1 :
+                    #if 0 <= (min - super_list[n][0]) <= 1 :
+                    if 0 <= (min - super_list[n][0]) <= 2:
                         clusters_in_super_cluster = clusters_in_super_cluster + 1
                         hits_in_super_cluster =hits_in_super_cluster + super_list[n][1]
-                        sum = sum + super_list[n][0]
+                        sum = sum + super_list[n][0]*super_list[n][1]
                         min = super_list[n][0]
                         if super_list[n][2] != super_list[m][2]:
                             layer_number_cluster = 2
@@ -311,7 +318,7 @@ def super_cluster(cluster_strip,cluster_number,detector_number):
             # super_cluster的边界没什么意义
             # the strips could be equal on doublet layers
             if max >= min:
-                super_strip.append([sum / clusters_in_super_cluster, clusters_in_super_cluster,int(hits_in_super_cluster),layer_number_cluster])
+                super_strip.append([sum / hits_in_super_cluster, clusters_in_super_cluster,int(hits_in_super_cluster),layer_number_cluster])
             m = m + 1
             # 延展super_cluster中的cluster不再进入super_cluster的搜索循环
             # skip the loop of clusters in super_cluster
@@ -329,7 +336,7 @@ def seed_corresponding(candidate_seed):
     seed_RPC3_strip = int(seed_RPC3_x / 0.03)
     seed_RPC1_x = seed_x * 6.803 / 7.481
     seed_RPC1_strip = int(seed_RPC1_x / 0.03)
-    return([seed_RPC1_strip,seed_RPC3_strip])
+    return([seed_RPC1_strip,seed_RPC3_strip,seed_RPC1_x,seed_RPC3_x])
 
 #通过比对super_cluster的距离选取最合适的构成candidate_event
 # find the suitable super_cluster with the least difference
@@ -340,7 +347,7 @@ def super_cluster_selection(seed_strip, RPC_cluster):
         if RPC_cluster[i][0]>0:
             difference = seed_strip - RPC_cluster[i][0]
             #scanning_window的左右界
-            if -32 <=  difference <= 32:
+            if -24 <=  difference <= 32:
                 if abs(difference) < difference_const:
                     difference_const = abs(difference)
                     selection = i
@@ -359,6 +366,8 @@ def write_into(event_number, ptc_type):
     v = 0
     w = 0
     while i < event_number:
+        hit_k = 0
+        hit_const = 0
         number_of_candidate_events = 0
         ptc = ptc_init(ptc_type)
         RPC_all = RPC_init()
@@ -377,7 +386,7 @@ def write_into(event_number, ptc_type):
         for k in range(len(RPC2_cluster)):
             candidate_seed = RPC2_cluster[k]
             if candidate_seed[0]>0:
-                [seed_RPC1_strip,seed_RPC3_strip] = seed_corresponding(candidate_seed)
+                [seed_RPC1_strip,seed_RPC3_strip,seed_RPC1_x,seed_RPC3_x] = seed_corresponding(candidate_seed)
                 #print(seed_RPC1_strip,seed_RPC3_strip)
                 RPC1_selection = super_cluster_selection(seed_RPC1_strip, RPC1_cluster)
                 RPC3_selection = super_cluster_selection(seed_RPC3_strip, RPC3_cluster)
@@ -386,6 +395,11 @@ def write_into(event_number, ptc_type):
                     candidate_event = []
                     number_of_super_clusters = 3
                     hits_of_event = RPC1_selection[2] +candidate_seed[2] + RPC3_selection[2]
+                    #quality criteria
+                    if hits_of_event > hit_const:
+                        hit_const = hits_of_event
+                        hit_k = k
+                    #print(hits_of_event, k ,hit_k)
                     layers_with_hits_of_event = RPC1_selection[3] +candidate_seed[3] + RPC3_selection[3]
                     number_of_single_clusters = RPC1_selection[1] +candidate_seed[1] + RPC3_selection[1]
                     interval = abs(RPC1_selection[0]-seed_RPC1_strip)+abs(RPC3_selection[0]-seed_RPC3_strip)
@@ -397,20 +411,44 @@ def write_into(event_number, ptc_type):
                     candidate_event.append(layers_with_hits_of_event)
                     candidate_event.append(number_of_single_clusters)
                     candidate_event.append(interval)
-                    print(candidate_event)
+                    count1[number_of_super_clusters] = count1[number_of_super_clusters] + 1
+                    count2[hits_of_event] = count2[hits_of_event] + 1
+                    count3[layers_with_hits_of_event] = count3[layers_with_hits_of_event] + 1
+                    count4[number_of_single_clusters] = count4[number_of_single_clusters] + 1
                     number_of_candidate_events = number_of_candidate_events + 1
-                    output_list.extend(strip_list)
+                    w = w + 1
+        if number_of_candidate_events > 0:
+            output_list.extend(strip_list)
+            output_list.append(number_of_candidate_events)
+            output_list.append(ptc_type*ptc[4])
+            for k in range(len(RPC2_cluster)):
+                candidate_seed = RPC2_cluster[k]
+                [seed_RPC1_strip, seed_RPC3_strip,seed_RPC1_x,seed_RPC3_x] = seed_corresponding(candidate_seed)
+                RPC1_selection = super_cluster_selection(seed_RPC1_strip, RPC1_cluster)
+                RPC3_selection = super_cluster_selection(seed_RPC3_strip, RPC3_cluster)
+                if RPC1_selection != None and RPC3_selection != None:
+                    RPC1_normalization = round((((RPC1_selection[0]*0.03+0.015)-seed_RPC1_x)/0.06),3)
+                    RPC2_normalization = round(((candidate_seed[0]*0.03+0.015)-3.8)/5.2,3)
+                    RPC3_normalization = round((((RPC3_selection[0]*0.03+0.015)-seed_RPC3_x)/0.45),3)
                     output_list.append(RPC1_selection[0])
                     output_list.append(candidate_seed[0])
                     output_list.append(RPC3_selection[0])
-                    w = w + 1
-                    with open(PATH, "a") as csvfile:
-                        writer = csv.writer(csvfile, delimiter=',')
-                        writer.writerow(output_list)
-        if number_of_candidate_events > 0:
+                    output_list.append(RPC1_normalization)
+                    output_list.append(RPC2_normalization)
+                    output_list.append(RPC3_normalization)
+            for j in range((5-number_of_candidate_events)*6):
+                        output_list.append(0)
+                        #print(0)
+            with open(PATH, "a") as csvfile:
+                writer = csv.writer(csvfile, delimiter=',')
+                writer.writerow(output_list)
             v = v + 1
         i = i + 1
     print(i, v , w)
+    print(count1)
+    print(count2)
+    print(count3)
+    print(count4)
 
 
 def output():
